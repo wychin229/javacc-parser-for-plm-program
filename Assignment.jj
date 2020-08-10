@@ -1,0 +1,640 @@
+options {
+   /* Code to set various options flags */
+}
+
+PARSER_BEGIN(Assignment)
+
+import java.util.ArrayList;
+import java.io.*;
+
+public class Assignment{
+    /* Java program is placed here */
+    // the main function of java program
+    static class MyException extends Exception{
+        //the error class to show DIVERGENCE
+
+        MyException(String message){
+            super(message);
+        }
+    }
+
+    public static void main(String[] args) {
+        try {
+            Assignment parser = new Assignment( System.in ) ;
+            parser.Root(System.out) ;
+        } catch(TokenMgrError e){
+            System.out.println("FAIL");
+            System.err.println(e.getMessage());
+        } catch(ParseException e){
+            System.out.println("FAIL");
+            String message=e.getMessage();
+            message = message.replace("\"","");
+            String[] messageL=message.split(" ");
+            ArrayList<String> result = new ArrayList<String>();
+            for(int i = 0; i < messageL.length; i++) {
+                if(messageL[i]!=" "|messageL[i]!="    "|messageL[i]!="  "|messageL[i]!="") {
+                    result.add(messageL[i]);
+                }
+            }
+//            for(int i=0;i<result.size();i++){
+//                System.out.println("."+result.get(i)+".");
+//            }
+            int getExp;
+            for(int i=0; i<result.size();i++){
+                if((result.get(i)).equals("line")){
+                    String s = result.get(i+1);
+                    String[] sl = s.split(",");
+                    System.err.println(sl[0]);
+                }
+                if((result.get(i)).equals("expecting:\n")
+                    ||(result.get(i)).equals("expecting")){
+                    getExp=i;
+                    for(int j = getExp+1; j<result.size();j++){
+                        if((result.get(j)).equals("{")){
+                            System.err.println("Missing Opening Bracket.");
+                            break;
+                        }else if((result.get(j)).equals("}")){
+                            System.err.println("Missing Closing Bracket.");
+                            break;
+                        }else if((result.get(j)).equals("(")){
+                            System.err.println("Missing Opening Parenthesis.");
+                            break;
+                        }else if((result.get(j)).equals(")")){
+                            System.err.println("Missing Closing Parenthesis.");
+                            break;
+                        }else if((result.get(j)).equals("DEF")){
+                            System.err.println("Missing DEF keyword.");
+                            break;
+                        }else if((result.get(j)).equals(";")){
+                            System.err.println("Missing Semicolon.");
+                            break;
+                        }else if((result.get(j)).equals("DEF")){
+                            System.err.println("Missing DEF keyword.");
+                            break;
+                        }else if((result.get(j)).equals("<FUNC_NAME>")
+                                ||(result.get(j)).equals("<PARAM>")
+                                ||(result.get(j)).equals("<NUM>")){
+                            System.err.println("Function body cannot be empty.");
+                            break;
+                        }
+                        if(j==result.size()-1){
+                            System.err.println("Error.Invalid Function name or parameter name");
+                        }
+                    }
+                    break;
+                }
+            }//System.err.println(e.getMessage());
+        } catch(MyException e){
+            System.err.println(e.getMessage());
+        }
+    }    
+    // an array list to save the functions in the file
+    static class FuncList{
+        private ArrayList<Func> funcList = new ArrayList<Func>();
+        private Boolean hasMain = false;
+
+        void addFunc(Func newFunc){
+            funcList.add(funcList.size(),newFunc);
+        }
+
+        int getSize(){
+            return funcList.size();
+        }
+
+        Boolean getHasMain(){
+            return hasMain;
+        }
+
+        void insertMain() throws MyException{
+            if(!hasMain){
+                hasMain=true;
+            }else{
+                System.out.println("FAIL");
+                System.err.println(funcList.size()+1);
+                System.err.println("Duplicate Main function.");
+                throw new MyException("");
+            }
+        }
+
+        Func getFunc(String funcName) throws MyException{
+	        int ret=-1;
+            for(int i=0;i<funcList.size();i++){
+                if((funcList.get(i)).getFuncName().equals(funcName)){
+                    ret=i;
+                    break;
+                }
+            }
+            if(ret==-1){
+                System.out.println("FAIL");
+                System.err.println("-1");
+                System.err.println("Function not found.");
+                throw new MyException("");
+            }
+            return funcList.get(ret);
+        }
+
+        Func getMain()throws MyException{
+            return this.getFunc("MAIN");
+        }
+
+        int solveM(BodyList b)throws MyException{
+            int value;
+            value=compileM(b);
+            //System.out.println("solveM:");
+            //System.out.println(value);
+            return value;
+        }
+
+        int compileM(BodyList b)throws MyException{
+            ArrayList<SepBody> sep = b.getBody();
+
+            //get first operand
+            int value1 = getOpdM(b,0);
+
+            if(value1==-1){//is a function call
+                value1=solveFCall(sep,0);
+            }
+
+            int j=1;
+            while(j<b.getSepSize()){
+                //get the following operand
+                int value2 = getOpdM(b,j);
+                if(value2==-1){
+                    value2=solveFCall(sep,j);
+                }
+                //get operator
+                if((b.getOpAt(j-1)).equals("+")){ //plus
+                    value1+=value2;
+                }
+                else{ //multiply
+                    value1*=value2;
+                }
+                j++;
+            }
+            return value1;
+        }
+
+        int solveFCall(ArrayList<SepBody> sep,int j)throws MyException{
+            int param = compileM(sep.get(j).getB());
+            return run(sep.get(j).getName(),param,"MAIN");
+        }
+
+        int getOpdM(BodyList body,int index){
+            if(body.getSepAt(index).isNum()){
+                return Integer.parseInt((body.getSepAt(index)).getName());
+            }else{
+                return -1; // is func call
+            }
+        }
+
+        int run(String now,int param,String from)throws MyException{
+            //@fName = the function called
+            //@from the function it was called from
+            Func f=this.getFunc(now);
+            BodyList b = f.getFuncBody();
+
+            return compileF(b,param,from,now);
+        }
+
+        int compileF(BodyList b,int param,String from,String now) throws MyException{
+            ArrayList<SepBody> sep = b.getBody();
+
+            //get first operand
+            int value1=getOpdF(b,0);
+
+            if(value1==-2){
+                value1=param;
+            }else if(value1==-1){
+                if((sep.get(0)).getName().equals(from)){
+                    throw new MyException("DIVERGENCE");
+                }
+                int arg = compileF((sep.get(0)).getB(),param,now,(sep.get(0)).getName());
+               // System.out.println(arg);
+                value1=run((sep.get(0)).getName(),arg,now);
+            }
+            int j =1;
+            while(j<b.getSepSize()){
+                //get the following operand
+                int value2 = getOpdF(b,j);
+                if(value2==-2){
+                    value2=param;
+                }else if(value2==-1){
+                    if((sep.get(j)).getName().equals(from)){
+                        throw new MyException("DIVERGENCE");
+                    }
+                    int arg = compileF((sep.get(j)).getB(),param,now,(sep.get(j)).getName());
+                   // System.out.println(arg);
+                    value2=run((sep.get(j)).getName(),arg,now);
+                }
+
+                //get operator
+                if((b.getOpAt(j-1)).equals("+")){ //plus
+                    value1+=value2;
+                }
+                else{ //multiply
+                    value1*=value2;
+                }
+                j++;
+            }
+            return value1;
+        }
+
+        int getOpdF(BodyList body,int index) {
+            if(body.getSepAt(index).isNum()){
+                return Integer.parseInt((body.getSepAt(index)).getName());
+            }else if(body.getSepAt(index).isCall()){
+                return -1;
+            }else{ // is a parameter
+                return -2;
+            }
+        }
+
+        void description(){
+            for(int i =0; i<funcList.size();i++){
+                funcList.get(i).description();
+            }
+        }
+
+    }
+    // a function object
+    static class Func{
+        // **the MAIN class will have "_" as its funcParam.
+        private String funcName;
+        private String funcParam;
+        private BodyList funcBody;
+
+        // constructor
+        Func(String n, String p) {
+            funcName = n;
+            funcParam = p;
+        }
+        // get function name
+        String getFuncName(){
+            return funcName;
+        }
+        // get function body
+        BodyList getFuncBody(){
+            return funcBody;
+        }
+        // get function body
+        String getFuncParam(){
+            return funcParam;
+        }
+        // check for self calling function
+        Boolean checkLoop(String fName){
+            return funcBody.check(fName);
+        }
+        // set the function body after process it through parser
+        public void setFuncBody(BodyList b){
+            this.funcBody = b;
+        }
+
+        void description(){
+            System.out.println("function name:"+funcName);
+            System.out.println("function param:"+funcParam);
+            System.out.println("function body:");
+            funcBody.description();
+        }
+    }
+    // a function body object (ArrayList)
+    static class BodyList{
+        protected enum Type {NUM,OPERATOR,CALL,PARAM}
+        private ArrayList<SepBody> bodyList = new ArrayList<SepBody>();
+        private ArrayList<String> opList = new ArrayList<String>();
+
+        void addToBody(SepBody b){
+            bodyList.add(bodyList.size(),b);
+        }
+        void addToOp(String s){
+            opList.add(opList.size(),s);
+        }
+
+        Boolean check(String fName){
+            for(int i=0;i<bodyList.size();i++){
+                if((bodyList.get(i)).checkSep(fName)){
+                    return true;
+                }
+            }return false;
+        }
+
+        Boolean isEmpty(){
+            return bodyList.size()<=0;
+        }
+
+        ArrayList<SepBody> getBody(){
+            return bodyList;
+        }
+
+        SepBody getSepAt(int index){
+            return bodyList.get(index);
+        }
+
+        String getOpAt(int index){
+            return opList.get(index);
+        }
+
+        int getSepSize(){
+            return bodyList.size();
+        }
+
+        void description(){
+            String s;
+            for(int i =0; i<bodyList.size();i++){
+                this.bodyList.get(i).description();
+            }
+            s="<";
+            for(int i=0;i<opList.size();i++){
+                s+=opList.get(i);
+            }
+            s+=">";
+            System.out.println(s);
+        }
+    }
+    // an object in body
+    static class SepBody{
+        protected enum Type {NUM,CALL,PARAM}
+        private Type type;
+        private String callName; // function call, number or param
+        private BodyList bList;
+
+        SepBody(String s,String t){
+           // System.out.println(t);
+            this.callName=s;
+            if(t.equals("num")){
+                this.type = Type.NUM;
+            }else if(t.equals("param")){
+                this.type = Type.PARAM;
+            }
+            this.bList=new BodyList(); // empty
+        }
+        // only for function call in the body
+        SepBody(String s,String t,BodyList b){
+            //System.out.println("call");
+            this.callName=s;
+            this.type=Type.CALL;
+            this.bList=b;
+        }
+
+        void description(){
+            System.out.println("Detail: "+this.callName);
+            if(this.type==Type.NUM){
+                System.out.println("Type: NUM");
+            }else if(this.type==Type.CALL){
+                System.out.println("Type: CALL");
+            }else{
+                System.out.println("Type: PARAM");
+            }
+            if(bList.getSepSize()>=1){
+                System.out.println("*");
+                bList.description();
+                System.out.println("*");
+            }
+        }
+        Boolean checkSep(String fName){
+            if(this.bList.getSepSize()<1){
+                if(this.callName.equals(fName)){
+                    return true;
+                }
+            }return bList.check(fName);
+        }
+        BodyList getB(){
+            return bList;
+        }
+        String getName(){
+            return callName;
+        }
+        Boolean isNum(){
+            return type == Type.NUM;
+        }
+        Boolean isParam(){
+            return type == Type.PARAM;
+        }
+        Boolean isCall(){
+            return type == Type.CALL;
+        }
+    }
+   
+}
+
+PARSER_END(Assignment)
+
+// lexical analyzer
+TOKEN : { < NUMBER : (["0"-"9"])+ >
+        | < PLUS : "+" >
+        | < MULTIPLY : "*" >
+        | < DEF : "DEF" >
+        | < END_OF_LINE : "\n" | "\r" | "\r\n" >
+        | < PARAM : (["a"-"z"])+ >
+        | < FUNC_NAME : (["A"-"Z"])+ >
+        | < SEMICOLON : ";" >
+        | < SPACE : " " >
+        | < OPEN_BRAC : "{" >
+        | < CLOSE_BRAC : "}" >
+        | < OPEN_PARENTHESIS : "(" >
+        | < CLOSE_PARENTHESIS : ")" >
+        }
+
+/* Root Production */
+void Root(PrintStream printStream) throws MyException:
+{
+int retVal;
+Boolean a;
+FuncList list;
+}
+{
+    // save all input to FuncList first, then only initiate calculation
+    // can have multiple line of function in input file
+    {list = new FuncList();}
+    a=Start(list)
+    {
+        if(a==true){
+            printStream.println("PASS");
+        }else{
+            printStream.println("FAIL");
+            //break;
+        }
+    }
+    retVal = Cal(list)
+    {printStream.println(retVal);}
+}
+
+Boolean Start(FuncList myList)throws MyException:
+{
+Token t;
+}
+{
+   ( <DEF> <SPACE> t=<FUNC_NAME> <SPACE> Choose(myList,t.image) )* <EOF>
+   {
+        if(!myList.getHasMain()){
+            System.out.println("FAIL");
+            System.err.println("0");
+            System.err.println("Missing Main function");
+            throw new MyException("");
+        }
+        return true;
+   }
+}
+
+void Choose(FuncList myList,String fName)throws MyException:
+{
+Token t;
+}
+{   LOOKAHEAD(1)
+    <OPEN_BRAC> Main(myList,fName)
+    |
+    t=<PARAM> <SPACE> <OPEN_BRAC> Norm(myList,fName,t.image)
+}
+
+void Main(FuncList myList,String fName) throws MyException:
+{
+Token t;
+Func newF;
+}
+{
+    {
+        myList.insertMain();
+        if(!fName.equals("MAIN")){
+            System.out.println("FAIL");
+            System.err.println(myList.getSize());
+            System.err.println("Only Main function do not have parameter.");
+            throw new MyException("");
+        }
+        newF = new Func("MAIN","_");
+    }
+     Function(newF,myList)
+    {myList.addFunc(newF);}
+}
+
+void Norm(FuncList myList,String fName,String p)throws MyException:
+{
+Func newF;
+Boolean b;
+}
+{
+    {
+        if(fName.equals("MAIN")|fName.equals("DEF")){
+            System.out.println("FAIL");
+            System.err.println(myList.getSize());
+            System.err.println("Main function cannot have parameter");
+            throw new MyException("");
+        }
+        newF = new Func(fName,p);
+    }
+    Function(newF,myList)
+    {myList.addFunc(newF);}
+}
+
+void Function(Func f,FuncList myList)throws MyException:
+{
+BodyList newB;
+}
+{
+    < SPACE >
+    newB=Body()
+    {f.setFuncBody(newB);
+    if(newB.isEmpty()){
+        System.out.println("FAIL");
+        System.err.println(myList.getSize());
+        System.err.println("Function body cannot be empty");
+        throw new MyException("");}
+    }
+    < SPACE >
+    < CLOSE_BRAC >
+    < SPACE >
+    < SEMICOLON >
+    < END_OF_LINE >
+}
+
+BodyList Body() :
+{
+String whole;
+Token t,operator;
+BodyList b;
+BodyList bodyL = new BodyList();
+}
+{
+    // body can start with either a function call, a number or the functions parameter
+    ( t=< FUNC_NAME>
+      < OPEN_PARENTHESIS >
+      b=Body()
+      < CLOSE_PARENTHESIS >
+        {
+            whole=t.image;
+            if(whole.equals("MAIN")){
+                System.err.println("Main cannot be called in function.");
+                //throw new ParseException("Main cannot be called.");
+            }
+            SepBody nb = new SepBody(whole,"call",b);
+            bodyL.addToBody(nb);
+        }
+    | t=< NUMBER >
+        {
+            whole=t.image;
+            SepBody nb = new SepBody(whole,"num");
+            bodyL.addToBody(nb);
+         }
+    | t=< PARAM >
+        {
+            whole=t.image;
+            SepBody nb = new SepBody(whole,"param");
+            bodyL.addToBody(nb);
+        }
+    )
+
+    (
+        // the operator
+        ( operator=< PLUS > | operator=< MULTIPLY > )
+        {
+            bodyL.addToOp(operator.image);
+        }
+
+        ( t=< FUNC_NAME>
+          < OPEN_PARENTHESIS >
+          b=Body()
+          < CLOSE_PARENTHESIS >
+          {
+             whole=t.image;
+             SepBody nb = new SepBody(whole,"call",b);
+             bodyL.addToBody(nb);
+          }
+        | t=< NUMBER >
+          {
+            whole=t.image;
+            SepBody nb = new SepBody(whole,"num");
+            bodyL.addToBody(nb);
+          }
+        | t=< PARAM >
+          {
+            whole=t.image;
+            SepBody nb = new SepBody(whole,"param");
+            bodyL.addToBody(nb);
+          }
+        )
+    )*
+
+    {
+        return bodyL;
+    }
+
+}
+
+int Cal(FuncList myList)throws MyException:
+{
+int val;
+}
+{
+    // first find the MAIN function from FuncList
+    // there will be NO PARAMETER in MAIN function
+    // iterate through until get a number result, return result
+
+    {
+        //{myList.description();}
+        Func main=myList.getMain();
+        BodyList body=main.getFuncBody();
+
+        val=myList.solveM(body);
+
+        return val;
+    }
+}
+
